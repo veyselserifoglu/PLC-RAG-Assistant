@@ -1,3 +1,10 @@
+```markdown
+# RAG System Architecture and Data Flow
+
+This document provides a comprehensive overview of the architecture and data flow for the Retrieval-Augmented Generation (RAG) system. The diagrams illustrate the various components and their interactions within the system.
+
+## 1. System Architecture Overview
+
 ```mermaid
 graph TD
     subgraph "User Client"
@@ -147,4 +154,98 @@ graph TD
     class VectorDB,PostgresDB db
     class LocalLLM llm
     class VolumeKB,VolumeChat volume
+```
+
+### 4. Advanced RAG Retrieval Strategy
+
+```mermaid
+graph TD
+    A[User Query] --> B{Query Analysis}
+    B --> B1[Query Rewriting/Expansion]
+    B1 --> B2{Additional Data Required?}
+
+    B2 -- "Yes" --> C[Formulate Search Queries]
+    B2 -- "No" --> H
+
+    C --> D[Retrieve Initial Context]
+    D --> E{Retrieve Data from Vector DB};
+    E --> F[Re-rank Results];
+    F --> G[Augment Prompt with Context];
+    G --> H{Generate Response with LLM}; 
+
+    H --> I{Evaluate Response};
+    I -- "Good" --> J[Return Response to User];
+    I -- "Needs Refinement" --> B;
+
+    subgraph "Query Preprocessing"
+        direction LR
+        B
+        B1
+        B2
+        C
+    end
+
+    subgraph "Retrieval & Re-ranking"
+        direction LR
+        D
+        E
+        F
+    end
+
+    subgraph "Generation & Iterative Refinement"
+        direction LR
+        G
+        H
+        I
+    end
+
+    classDef queryPreprocessing fill:#lightblue,stroke:#333,stroke-width:2px;
+    classDef retrievalReranking fill:#lightgreen,stroke:#333,stroke-width:2px;
+    classDef generationRefinement fill:#lightcoral,stroke:#333,stroke-width:2px;
+
+    class B,B1,B2,C queryPreprocessing;
+    class D,E,F retrievalReranking;
+    class G,H,I generationRefinement;
+    class A,J fill:#eee,stroke:#333,stroke-width:2px;
+```
+
+### 5. Phase 1 Prototype: Minimal Viable RAG Flow
+
+```mermaid
+graph TD
+    subgraph "Minimal Viable MCP Client (e.g., Python Script)"
+        direction LR
+        UserInput[User Enters Query via Script/Simple UI] --> ClientApp{Client Application};
+        ClientApp -- "Sends HTTP Request (Query)" --> MCPServerEndpoint;
+        MCPServerEndpoint -- "Receives HTTP Response (LLM Output)" --> ClientApp;
+        ClientApp --> DisplayResponse[Displays LLM Response];
+    end
+
+    subgraph "Minimal Viable RAG Core (MCP Server)"
+        direction TB
+        MCPServerEndpoint[MCP Server Endpoint e.g., FastAPI];
+        
+        subgraph "Simplified RAG Pipeline"
+            direction TB
+            QueryInput[Raw User Query] --> VectorDBQuery;
+            VectorDBQuery{Basic Retrieval from Vector DB} --> RetrievedChunks;
+            RetrievedChunks --> PromptAugmentation{Basic Prompt Augmentation};
+            PromptAugmentation -- "Augmented Prompt (Query + Chunks)" --> LLMInterface;
+            LLMInterface{LLM Call } --> LLMOutput[Generated Text];
+        end
+
+        PreloadedVectorDB[("Pre-loaded In-Memory Vector DB <br/> (e.g., FAISS/ChromaDB with <br/> 5-10 manually embedded chunks)")] -.- VectorDBQuery;
+        MCPServerEndpoint --> QueryInput;
+        LLMOutput --> MCPServerEndpoint;
+    end
+
+    classDef clientSide fill:#cde,stroke:#333,stroke-width:2px;
+    classDef serverSide fill:#fde,stroke:#333,stroke-width:2px;
+    classDef processStep fill:#e6ffe6,stroke:#333,stroke-width:1px;
+    classDef dataStore fill:#ffe6cc,stroke:#333,stroke-width:1px;
+
+    class UserInput,ClientApp,DisplayResponse clientSide;
+    class MCPServerEndpoint,QueryInput,VectorDBQuery,RetrievedChunks,PromptAugmentation,LLMInterface,LLMOutput serverSide;
+    class PreloadedVectorDB dataStore;
+    class VectorDBQuery,PromptAugmentation,LLMInterface processStep;
 ```

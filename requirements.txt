@@ -1,5 +1,15 @@
-jupyter
-sentence-transformers
-faiss-cpu
-ollama
-pandas
+# Core RAG and ML
+sentence-transformers==2.7.0
+faiss-cpu==1.8.0 # For vector storage and similarity search
+ollama==0.2.0 # To interact with the Ollama LLM service
+
+# MCP Server (FastAPI)
+fastapi==0.111.0
+uvicorn[standard]==0.29.0 # ASGI server to run FastAPI
+
+# MCP Client (if building a simple Python script client)
+requests==2.31.0
+
+# Notebooks and Data Handling (already present, useful for prep)
+jupyter==1.0.0 
+pandas==2.2.2
