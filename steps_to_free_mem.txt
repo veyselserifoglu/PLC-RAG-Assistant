@@ -1,0 +1,3 @@
+nvidia-smi
+kill -9 {process-id}
+nvidia-smi

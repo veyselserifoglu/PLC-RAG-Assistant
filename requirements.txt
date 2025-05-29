@@ -13,3 +13,9 @@ requests==2.31.0
 # Notebooks and Data Handling (already present, useful for prep)
 jupyter==1.0.0 
 pandas==2.2.2
+langchain==0.2.0 # For RAG and LLM integration
+langchain-community==0.2.0 # Community extensions for LangChain
+pypdf==3.10.0 # For PDF handling
+einops==0.6.1 # For tensor manipulation
+faiss-cpu==1.8.0 # For vector storage and similarity search
+chromadb==0.4.0 # For vector database management
