@@ -1,5 +1,5 @@
 """
-Module responsibilities:
+Embeddings Module responsibilities:
 
 1. Model Management & Initialization:
 
