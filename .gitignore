@@ -173,4 +173,14 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-chroma_db_test_main
+# Data files (add your specific data paths if needed)
+/data/
+/chroma_db_test_main/
+
+# Environment configuration files
+.env
+*.env
+config/app_config.yaml
+
+# macOS specific
+.DS_Store
