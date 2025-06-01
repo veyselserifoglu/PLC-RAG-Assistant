@@ -58,26 +58,40 @@ graph TD
 ```mermaid
 graph TD
     subgraph "User"
-    A[Enters Query] --> M[Sees Response]
+        A[User Enters Query] --> M[User Sees Response]
     end
     
     subgraph "Web Layer"
-    B[Server] --> C[Auth]
-    K[Server] --> L[UI]
+        B[Server Request Handling]
+        Auth[Authentication]
+        K[Server Response Handling]
+        UI[UI Display]
+
+        B --> Auth
+        K --> UI
     end
     
-    subgraph "RAG System"
-    D[Core] --> E[Embed]
-    E --> F[Search]
-    F --> G[Retrieve]
+    subgraph "RAG Processing Pipeline" // Updated RAG System details
+        QueryPreProc[Query Preprocessing]
+        QueryRewrite[Query Rewriting]
+        QueryEmbed[Query Embedding]
+        ContextRetrieve[Context Retrieval from Vector DB]
+        PromptEng[Prompt Engineering with Context & History]
+        LLMGen[LLM Generation]
+        ResponseFormat[Response Formatting/Post-processing]
+
+        QueryPreProc --> QueryRewrite
+        QueryRewrite --> QueryEmbed
+        QueryEmbed --> ContextRetrieve
+        ContextRetrieve --> PromptEng
+        PromptEng --> LLMGen
+        LLMGen --> ResponseFormat
     end
     
     A --> B
-    C --> D
-    G --> H[Augment]
-    H --> I[LLM]
-    I --> J[Gen Response]
-    J --> K
+    Auth --> QueryPreProc 
+    ResponseFormat --> K
+    UI --> M
 ```
 
 ### 3. Deployment Diagram (Docker Focus)
