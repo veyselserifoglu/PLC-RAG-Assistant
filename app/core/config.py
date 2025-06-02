@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal, Optional
+from app.prompts import prompt_texts
 
 class LLMSettings(BaseSettings):
     model_identifier: str = "default_local_llm_model"
@@ -16,14 +17,20 @@ class DatabaseSettings(BaseSettings):
     database_type: Literal["sqlite", "postgresql"] = "postgresql"
     sql_database_uri: Optional[str] = None
 
+# New class for Prompt Configuration
+class PromptConfigSettings(BaseSettings):
+    """Holds configurations for prompt templates."""
+    general_system_template: str = prompt_texts.GENERAL_SYSTEM_PROMPT_TEMPLATE
+
 class AppSettings(BaseSettings):
     llm: LLMSettings = LLMSettings()
     vector_store: VectorStoreSettings = VectorStoreSettings()
     database: DatabaseSettings = DatabaseSettings()
+    prompt_config: PromptConfigSettings = PromptConfigSettings()
     logging_level: str = "INFO"
 
     model_config = SettingsConfigDict(
-        env_nested_delimiter='__', # e.g., LLM__MODEL_IDENTIFIER for env vars
+        env_nested_delimiter='__',
         extra='ignore'
     )
 
