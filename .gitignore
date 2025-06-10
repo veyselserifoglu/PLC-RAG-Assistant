@@ -184,3 +184,6 @@ config/app_config.yaml
 
 # macOS specific
 .DS_Store
+
+/www.seitz.et.hs-mannheim.de
+/extracted_content.json

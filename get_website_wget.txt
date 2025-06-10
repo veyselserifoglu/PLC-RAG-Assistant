@@ -1,0 +1,12 @@
+wget \
+    --recursive \
+    --no-clobber \
+    --page-requisites \
+    --html-extension \
+    --convert-links \
+    --restrict-file-names=windows \
+    --domains seitz.et.hs-mannheim.de \
+    --no-parent \
+    --wait=1 \
+    -P ~/Downloads/sps_lernseite_seitz_hs_mannheim \
+    https://www.seitz.et.hs-mannheim.de/sps-lern-und-uebungsseite.html
