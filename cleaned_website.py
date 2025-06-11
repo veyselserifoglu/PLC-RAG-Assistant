@@ -95,21 +95,55 @@ def extract_content_from_html(html_filepath_abs, project_root_dir):
         print(f"Error processing file {html_filepath_abs}: {e}")
         return None
 
-def main():
+def generate_markdown_output(all_data):
+    """
+    Generates a single Markdown string from all extracted data in the specified format.
+    """
+    from datetime import datetime
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    markdown_lines = ["# Documents Collection", ""]
+    markdown_lines.append("---")
+    markdown_lines.append("")
+
+    for i, data in enumerate(all_data):
+        markdown_lines.append(f"## Document {i+1}")
+        markdown_lines.append("")
+        markdown_lines.append("**Title:**  ")
+        markdown_lines.append(data.get('title', 'N/A'))
+        markdown_lines.append("")
+        markdown_lines.append(f"**Source Link:** {data.get('source_link', 'N/A')}")
+        markdown_lines.append(f"**Main Heading:** {data.get('main_heading', 'N/A')}")
+        
+        breadcrumbs = data.get('breadcrumbs', [])
+        breadcrumbs_str = ", ".join(breadcrumbs) if breadcrumbs else "N/A"
+        markdown_lines.append(f"**Breadcrumbs:** {breadcrumbs_str}")
+        
+        markdown_lines.append(f"**Canonical URL:** {data.get('canonical_url', 'N/A')}")
+        markdown_lines.append("")
+        markdown_lines.append("**Body Content:**  ")
+        markdown_lines.append(data.get('content', 'No content extracted'))
+        markdown_lines.append("")
+        markdown_lines.append("---")
+        markdown_lines.append("")
+
+    return "\n".join(markdown_lines)
+
+def main(output_format: str = "markdown"):
     project_root = "/home/dev/dev-projects/PLC-RAG-Assistant"
     html_root_dir_abs = os.path.join(project_root, "www.seitz.et.hs-mannheim.de")
+
     output_json_file_abs = os.path.join(project_root, "extracted_content.json")
+    output_markdown_file_abs = os.path.join(project_root, "extracted_content.md")
     
     all_extracted_data = []
 
     print(f"Starting scan in directory: {html_root_dir_abs}")
 
     for dirpath, _, filenames in os.walk(html_root_dir_abs):
-        # Sort filenames to process base files before @no_cache versions if order matters
-        # For skipping, the order doesn't strictly matter, but it's good practice.
         filenames.sort()
         
-        processed_base_files = set() # To keep track of base files if @no_cache is processed first
+        processed_base_files = set()
 
         for filename in filenames:
             if filename.endswith(".html"):
@@ -140,12 +174,23 @@ def main():
 
     print(f"\nProcessed {len(all_extracted_data)} HTML files.")
     
-    try:
-        with open(output_json_file_abs, 'w', encoding='utf-8') as f:
-            json.dump(all_extracted_data, f, ensure_ascii=False, indent=4)
-        print(f"Successfully saved extracted data to {output_json_file_abs}")
-    except Exception as e:
-        print(f"Error saving JSON to file {output_json_file_abs}: {e}")
+    if output_format == "json":
+        try:
+            with open(output_json_file_abs, 'w', encoding='utf-8') as f:
+                json.dump(all_extracted_data, f, ensure_ascii=False, indent=4)
+            print(f"Successfully saved extracted data to {output_json_file_abs}")
+        except Exception as e:
+            print(f"Error saving JSON to file {output_json_file_abs}: {e}")
+    elif output_format == "markdown":
+        try:
+            markdown_content = generate_markdown_output(all_extracted_data)
+            with open(output_markdown_file_abs, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            print(f"Successfully saved extracted data to {output_markdown_file_abs}")
+        except Exception as e:
+            print(f"Error saving Markdown to file {output_markdown_file_abs}: {e}")
+    else:
+        print(f"Unknown output format: {output_format}. Please choose 'json' or 'markdown'.")
 
 if __name__ == "__main__":
     main()
