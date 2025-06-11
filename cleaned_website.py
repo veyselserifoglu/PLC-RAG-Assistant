@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import hashlib
 from bs4 import BeautifulSoup
 
 def extract_content_from_html(html_filepath_abs, project_root_dir):
@@ -95,6 +96,15 @@ def extract_content_from_html(html_filepath_abs, project_root_dir):
         print(f"Error processing file {html_filepath_abs}: {e}")
         return None
 
+def generate_content_hash(content):
+    """
+    Generate a stable hash for content to detect duplicates.
+    This is more reliable than Python's built-in hash() which is randomized between sessions.
+    """
+    # Normalize the content by lowercasing and stripping excessive whitespace
+    normalized = re.sub(r'\s+', ' ', content.lower()).strip()
+    return hashlib.md5(normalized.encode('utf-8')).hexdigest()
+
 def generate_markdown_output(all_data):
     """
     Generates a single Markdown string from all extracted data in the specified format.
@@ -130,13 +140,16 @@ def generate_markdown_output(all_data):
     return "\n".join(markdown_lines)
 
 def main(output_format: str = "markdown"):
-    project_root = "/home/dev/dev-projects/PLC-RAG-Assistant"
+    project_root = "/home/veysel/dev-projects/PLC-RAG-Assistant"
     html_root_dir_abs = os.path.join(project_root, "www.seitz.et.hs-mannheim.de")
 
     output_json_file_abs = os.path.join(project_root, "extracted_content.json")
     output_markdown_file_abs = os.path.join(project_root, "extracted_content.md")
     
     all_extracted_data = []
+    # Track content hashes to detect duplicates
+    seen_contents = set()
+    duplicate_count = 0
 
     print(f"Starting scan in directory: {html_root_dir_abs}")
 
@@ -165,20 +178,39 @@ def main(output_format: str = "markdown"):
                 
                 print(f"Processing: {html_filepath_abs}")
                 extracted_data = extract_content_from_html(html_filepath_abs, project_root)
+                
                 if extracted_data:
-                    all_extracted_data.append(extracted_data)
+                    # Get the content and generate a hash for duplicate detection
+                    content = extracted_data.get('content', '')
+                    
+                    # Skip very short content as it might be error pages
+                    if len(content) < 20:  # Arbitrary threshold for minimal meaningful content
+                        print(f"Skipping {html_filepath_abs} due to insufficient content length.")
+                        continue
+                        
+                    # Generate content hash using our helper function
+                    content_hash = generate_content_hash(content)
+                    
+                    # Check if we've already seen this content
+                    if content_hash in seen_contents:
+                        duplicate_count += 1
+                        print(f"Duplicate content detected in {html_filepath_abs}. Skipping.")
+                    else:
+                        # Add to our tracking set and save the data
+                        seen_contents.add(content_hash)
+                        all_extracted_data.append(extracted_data)
                 
                 if not is_no_cache_version:
                     processed_base_files.add(base_name)
 
 
-    print(f"\nProcessed {len(all_extracted_data)} HTML files.")
+    print(f"\nProcessed {len(all_extracted_data)} HTML files and filtered out {duplicate_count} duplicates.")
     
     if output_format == "json":
         try:
             with open(output_json_file_abs, 'w', encoding='utf-8') as f:
                 json.dump(all_extracted_data, f, ensure_ascii=False, indent=4)
-            print(f"Successfully saved extracted data to {output_json_file_abs}")
+            print(f"Successfully saved {len(all_extracted_data)} unique documents to {output_json_file_abs}")
         except Exception as e:
             print(f"Error saving JSON to file {output_json_file_abs}: {e}")
     elif output_format == "markdown":
@@ -186,7 +218,7 @@ def main(output_format: str = "markdown"):
             markdown_content = generate_markdown_output(all_extracted_data)
             with open(output_markdown_file_abs, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
-            print(f"Successfully saved extracted data to {output_markdown_file_abs}")
+            print(f"Successfully saved {len(all_extracted_data)} unique documents to {output_markdown_file_abs}")
         except Exception as e:
             print(f"Error saving Markdown to file {output_markdown_file_abs}: {e}")
     else:
