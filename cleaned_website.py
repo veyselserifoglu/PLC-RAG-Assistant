@@ -2,7 +2,10 @@ import os
 import json
 import re
 import hashlib
+import difflib
+from collections import defaultdict
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 def extract_content_from_html(html_filepath_abs, project_root_dir):
     """
@@ -105,6 +108,19 @@ def generate_content_hash(content):
     normalized = re.sub(r'\s+', ' ', content.lower()).strip()
     return hashlib.md5(normalized.encode('utf-8')).hexdigest()
 
+def calculate_text_similarity(text1, text2):
+    """
+    Calculate similarity between two text strings using difflib's SequenceMatcher.
+    Returns a float between 0 and 1, where 1 means identical.
+    """
+    # Normalize the texts (lowercase and remove extra whitespace)
+    text1 = re.sub(r'\s+', ' ', text1.lower()).strip()
+    text2 = re.sub(r'\s+', ' ', text2.lower()).strip()
+    
+    # Use SequenceMatcher to calculate similarity ratio
+    similarity = difflib.SequenceMatcher(None, text1, text2).ratio()
+    return similarity
+
 def generate_markdown_output(all_data):
     """
     Generates a single Markdown string from all extracted data in the specified format.
@@ -116,7 +132,8 @@ def generate_markdown_output(all_data):
     markdown_lines.append("---")
     markdown_lines.append("")
 
-    for i, data in enumerate(all_data):
+    # Add progress bar for markdown generation
+    for i, data in tqdm(enumerate(all_data), desc="Generating markdown entries", unit="doc", total=len(all_data)):
         markdown_lines.append(f"## Document {i+1}")
         markdown_lines.append("")
         markdown_lines.append("**Title:**  ")
@@ -143,71 +160,110 @@ def main(output_format: str = "markdown"):
     project_root = "/home/veysel/dev-projects/PLC-RAG-Assistant"
     html_root_dir_abs = os.path.join(project_root, "www.seitz.et.hs-mannheim.de")
 
-    output_json_file_abs = os.path.join(project_root, "extracted_content.json")
-    output_markdown_file_abs = os.path.join(project_root, "extracted_content.md")
+    output_json_file_abs = os.path.join(project_root, "extracted_content_v2.json")
+    output_markdown_file_abs = os.path.join(project_root, "extracted_content_v2.md")
     
     all_extracted_data = []
-    # Track content hashes to detect duplicates
+    # Track content hashes for exact duplicates
     seen_contents = set()
+    # Store content for similarity checks - mapping hash to actual content
+    content_store = {}
+    # Set similarity threshold
+    SIMILARITY_THRESHOLD = 0.97
+    # Track duplicate counts
     duplicate_count = 0
+    similarity_duplicate_count = 0
 
     print(f"Starting scan in directory: {html_root_dir_abs}")
 
+    # First collect all HTML files to process
+    all_html_files = []
     for dirpath, _, filenames in os.walk(html_root_dir_abs):
         filenames.sort()
-        
-        processed_base_files = set()
-
         for filename in filenames:
             if filename.endswith(".html"):
-                base_name = filename
-                is_no_cache_version = False
+                all_html_files.append((dirpath, filename))
+    
+    print(f"Found {len(all_html_files)} HTML files to process")
+    
+    processed_base_files = set()
+    
+    # Process files with a progress bar
+    for dirpath, filename in tqdm(all_html_files, desc="Processing HTML files", unit="file"):
+        if filename.endswith(".html"):
+            base_name = filename
+            is_no_cache_version = False
 
-                if filename.endswith("@no_cache=1.html"):
-                    base_name = filename.replace("@no_cache=1.html", ".html")
-                    is_no_cache_version = True
-                
-                html_filepath_abs = os.path.join(dirpath, filename)
+            if filename.endswith("@no_cache=1.html"):
+                base_name = filename.replace("@no_cache=1.html", ".html")
+                is_no_cache_version = True
+            
+            html_filepath_abs = os.path.join(dirpath, filename)
 
-                # Skip @no_cache=1.html if the base file exists or has been processed
-                if is_no_cache_version:
-                    base_file_path_abs = os.path.join(dirpath, base_name)
-                    if os.path.exists(base_file_path_abs) and base_name != filename : # ensure it's not comparing to itself
-                        print(f"Skipping no_cache version {html_filepath_abs} as base file {base_file_path_abs} exists.")
-                        continue
+            # Skip @no_cache=1.html if the base file exists or has been processed
+            if is_no_cache_version:
+                base_file_path_abs = os.path.join(dirpath, base_name)
+                if os.path.exists(base_file_path_abs) and base_name != filename: # ensure it's not comparing to itself
+                    # Using tqdm.write to not interfere with progress bar
+                    tqdm.write(f"Skipping no_cache version {html_filepath_abs} as base file {base_file_path_abs} exists.")
+                    continue
+            
+            # Using tqdm.write for clean output with progress bar
+            tqdm.write(f"Processing: {html_filepath_abs}")
+            extracted_data = extract_content_from_html(html_filepath_abs, project_root)
+            
+            if extracted_data:
+                # Get the content and generate a hash for duplicate detection
+                content = extracted_data.get('content', '')
                 
-                print(f"Processing: {html_filepath_abs}")
-                extracted_data = extract_content_from_html(html_filepath_abs, project_root)
-                
-                if extracted_data:
-                    # Get the content and generate a hash for duplicate detection
-                    content = extracted_data.get('content', '')
+                # Skip very short content as it might be error pages
+                if len(content) < 20:  # Arbitrary threshold for minimal meaningful content
+                    tqdm.write(f"Skipping {html_filepath_abs} due to insufficient content length.")
+                    continue
                     
-                    # Skip very short content as it might be error pages
-                    if len(content) < 20:  # Arbitrary threshold for minimal meaningful content
-                        print(f"Skipping {html_filepath_abs} due to insufficient content length.")
-                        continue
-                        
-                    # Generate content hash using our helper function
-                    content_hash = generate_content_hash(content)
-                    
-                    # Check if we've already seen this content
-                    if content_hash in seen_contents:
-                        duplicate_count += 1
-                        print(f"Duplicate content detected in {html_filepath_abs}. Skipping.")
-                    else:
-                        # Add to our tracking set and save the data
-                        seen_contents.add(content_hash)
-                        all_extracted_data.append(extracted_data)
+                # Generate content hash using our helper function
+                content_hash = generate_content_hash(content)
                 
-                if not is_no_cache_version:
-                    processed_base_files.add(base_name)
+                # Check if we've already seen this exact content
+                if content_hash in seen_contents:
+                    duplicate_count += 1
+                    tqdm.write(f"Exact duplicate content detected in {html_filepath_abs}. Skipping.")
+                    continue
+                
+                # Check for similar content
+                is_similar = False
+                # Display progress for similarity checking if many documents
+                similarity_iter = content_store.items()
+                if len(content_store) > 10:  # Only show nested progress for larger document sets
+                    similarity_iter = tqdm(similarity_iter, desc="Checking document similarity", 
+                                          leave=False, unit="doc", total=len(content_store))
+                
+                for existing_hash, existing_content in similarity_iter:
+                    similarity = calculate_text_similarity(content, existing_content)
+                    if similarity >= SIMILARITY_THRESHOLD:
+                        similarity_duplicate_count += 1
+                        tqdm.write(f"Similar content detected in {html_filepath_abs} (similarity: {similarity:.4f}). Skipping.")
+                        is_similar = True
+                        break
+                
+                if not is_similar:
+                    # Add to tracking set, content store, and save the data
+                    seen_contents.add(content_hash)
+                    content_store[content_hash] = content
+                    all_extracted_data.append(extracted_data)
+                
+            if not is_no_cache_version:
+                processed_base_files.add(base_name)
 
 
-    print(f"\nProcessed {len(all_extracted_data)} HTML files and filtered out {duplicate_count} duplicates.")
+    total_duplicates = duplicate_count + similarity_duplicate_count
+    print(f"\nProcessed files: {len(all_extracted_data) + total_duplicates}")
+    print(f"Filtered out {duplicate_count} exact duplicates and {similarity_duplicate_count} similar documents (similarity >= {SIMILARITY_THRESHOLD}).")
+    print(f"Total unique documents: {len(all_extracted_data)}")
     
     if output_format == "json":
         try:
+            print("Saving JSON output...")
             with open(output_json_file_abs, 'w', encoding='utf-8') as f:
                 json.dump(all_extracted_data, f, ensure_ascii=False, indent=4)
             print(f"Successfully saved {len(all_extracted_data)} unique documents to {output_json_file_abs}")
@@ -215,7 +271,9 @@ def main(output_format: str = "markdown"):
             print(f"Error saving JSON to file {output_json_file_abs}: {e}")
     elif output_format == "markdown":
         try:
+            print("Generating Markdown output...")
             markdown_content = generate_markdown_output(all_extracted_data)
+            print("Saving Markdown file...")
             with open(output_markdown_file_abs, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
             print(f"Successfully saved {len(all_extracted_data)} unique documents to {output_markdown_file_abs}")
