@@ -121,166 +121,229 @@ def calculate_text_similarity(text1, text2):
     similarity = difflib.SequenceMatcher(None, text1, text2).ratio()
     return similarity
 
-def generate_markdown_output(all_data):
+def generate_markdown_output(all_data, ids_to_remove):
     """
-    Generates a single Markdown string from all extracted data in the specified format.
+    Generates a clean markdown file containing only document numbers and consolidated text.
     """
-    from datetime import datetime
-    current_date = datetime.now().strftime("%Y-%m-%d")
-
-    markdown_lines = ["# Documents Collection", ""]
-    markdown_lines.append("---")
-    markdown_lines.append("")
+    markdown_lines = []
 
     # Add progress bar for markdown generation
     for i, data in tqdm(enumerate(all_data), desc="Generating markdown entries", unit="doc", total=len(all_data)):
+        if (i + 1) in ids_to_remove:
+            tqdm.write(f"Filtering out document: {i+1} ('{data.get('title', '')}')")
+            continue
+        
         markdown_lines.append(f"## Document {i+1}")
-        markdown_lines.append("")
-        markdown_lines.append("**Title:**  ")
-        markdown_lines.append(data.get('title', 'N/A'))
-        markdown_lines.append("")
-        markdown_lines.append(f"**Source Link:** {data.get('source_link', 'N/A')}")
-        markdown_lines.append(f"**Main Heading:** {data.get('main_heading', 'N/A')}")
         
+        # Consolidate all text content
+        title = data.get('title', '')
+        main_heading = data.get('main_heading', '')
         breadcrumbs = data.get('breadcrumbs', [])
-        breadcrumbs_str = ", ".join(breadcrumbs) if breadcrumbs else "N/A"
-        markdown_lines.append(f"**Breadcrumbs:** {breadcrumbs_str}")
-        
-        markdown_lines.append(f"**Canonical URL:** {data.get('canonical_url', 'N/A')}")
-        markdown_lines.append("")
-        markdown_lines.append("**Body Content:**  ")
-        markdown_lines.append(data.get('content', 'No content extracted'))
+        breadcrumbs_str = " ".join(breadcrumbs) if breadcrumbs else ""
+        body_content = data.get('content', '')
+
+        # Combine all text parts, ensuring they are not empty before joining.
+        full_content_parts = [part for part in [title, main_heading, breadcrumbs_str, body_content] if part and part.strip()]
+        merged_content = " ".join(full_content_parts)
+
+        markdown_lines.append(merged_content)
         markdown_lines.append("")
         markdown_lines.append("---")
-        markdown_lines.append("")
 
     return "\n".join(markdown_lines)
+
+
+def generate_metadata_output(all_data, ids_to_remove):
+    """
+    Generates a JSON file with metadata for each document.
+    """
+    metadata_list = []
+
+    for i, data in tqdm(enumerate(all_data), desc="Generating metadata entries", unit="doc", total=len(all_data)):
+        if (i + 1) in ids_to_remove:
+            continue
+
+        doc_metadata = {
+            "document_number": i + 1,
+            "source_link": data.get('source_link', ''),
+            "canonical_url": data.get('canonical_url', ''),
+            "title": data.get('title', ''),
+            "main_heading": data.get('main_heading', ''),
+            "breadcrumbs": data.get('breadcrumbs', [])
+        }
+
+        # Book metadata is now pre-extracted and attached to the data object
+        book_info = {
+            "book_title": data.get("book_title"),
+            "edition": data.get("edition"),
+            "publisher": data.get("publisher"),
+            "publication_date": data.get("publication_date"),
+        }
+        # Add book info to metadata if it exists, filtering out keys with None values
+        doc_metadata.update({k: v for k, v in book_info.items() if v})
+
+        metadata_list.append(doc_metadata)
+
+    return json.dumps(metadata_list, indent=4, ensure_ascii=False)
+
+
+def extract_and_clean_book_metadata(content):
+    """
+    Extracts book metadata from a sentence at the end of the content
+    and returns the metadata and the cleaned content.
+    """
+    # This regex is designed to find the specific sentence structure.
+    book_info_pattern = re.compile(
+        r"\s*(Speicherprogrammierbare Steuerungen.*?)\s+"
+        r"(\d+\.\s*Auflage)\s+"
+        r"erschienen im\s+(.*?)\s*,?\s*"
+        r"(\d{4})\s*$"
+    )
+
+    book_metadata = {}
+    cleaned_content = content
+    
+    match = book_info_pattern.search(content)
+    
+    if match:
+        book_metadata = {
+            "book_title": match.group(1).strip(),
+            "edition": match.group(2).strip(),
+            "publisher": match.group(3).strip(),
+            "publication_date": match.group(4).strip(),
+        }
+        # Use re.sub for a safe replacement of the matched pattern
+        cleaned_content = book_info_pattern.sub("", content).strip()
+        
+    return book_metadata, cleaned_content
 
 def main(output_format: str = "markdown"):
     project_root = "/home/veysel/dev-projects/PLC-RAG-Assistant"
     html_root_dir_abs = os.path.join(project_root, "www.seitz.et.hs-mannheim.de")
-
-    output_json_file_abs = os.path.join(project_root, "extracted_content_v2.json")
-    output_markdown_file_abs = os.path.join(project_root, "extracted_content_v2.md")
+    output_content_file_abs = os.path.join(project_root, "cleaned_content.md")
+    output_metadata_file_abs = os.path.join(project_root, "metadata.json")
     
+    # Set a similarity threshold
+    SIMILARITY_THRESHOLD = 0.95
+
     all_extracted_data = []
-    # Track content hashes for exact duplicates
     seen_contents = set()
-    # Store content for similarity checks - mapping hash to actual content
-    content_store = {}
-    # Set similarity threshold
-    SIMILARITY_THRESHOLD = 0.97
-    # Track duplicate counts
+    processed_base_files = set()
     duplicate_count = 0
     similarity_duplicate_count = 0
+    content_map = {}
 
-    print(f"Starting scan in directory: {html_root_dir_abs}")
+    html_files = []
+    for root, _, files in os.walk(html_root_dir_abs):
+        for file in files:
+            if file.endswith(".html"):
+                html_files.append(os.path.join(root, file))
 
-    # First collect all HTML files to process
-    all_html_files = []
-    for dirpath, _, filenames in os.walk(html_root_dir_abs):
-        filenames.sort()
-        for filename in filenames:
-            if filename.endswith(".html"):
-                all_html_files.append((dirpath, filename))
-    
-    print(f"Found {len(all_html_files)} HTML files to process")
-    
-    processed_base_files = set()
-    
-    # Process files with a progress bar
-    for dirpath, filename in tqdm(all_html_files, desc="Processing HTML files", unit="file"):
-        if filename.endswith(".html"):
-            base_name = filename
-            is_no_cache_version = False
+    # Use tqdm for progress bar
+    for html_filepath_abs in tqdm(html_files, desc="Extracting content", unit="file"):
+        base_name = os.path.basename(html_filepath_abs)
+        is_no_cache_version = '@no_cache=1' in base_name
+        
+        # Skip no-cache versions if the base version has been processed
+        if is_no_cache_version:
+            original_file_name = base_name.split('@no_cache=1')[0]
+            if original_file_name in processed_base_files:
+                tqdm.write(f"Skipping no-cache version: {base_name}")
+                continue
+        
+        data = extract_content_from_html(html_filepath_abs, project_root)
+        if data and data['content']:
+            content_hash = generate_content_hash(data['content'])
+            if content_hash not in seen_contents:
+                all_extracted_data.append(data)
+                seen_contents.add(content_hash)
+                content_map[content_hash] = data['content']
+                duplicate_count += 1
+            else:
+                duplicate_count += 1
+        
+        if not is_no_cache_version:
+            processed_base_files.add(base_name)
 
-            if filename.endswith("@no_cache=1.html"):
-                base_name = filename.replace("@no_cache=1.html", ".html")
-                is_no_cache_version = True
-            
-            html_filepath_abs = os.path.join(dirpath, filename)
+    # Second pass for similarity check
+    unique_data = []
+    seen_for_similarity = set()
+    for data in tqdm(all_extracted_data, desc="Checking for similar content", unit="doc"):
+        content_hash = generate_content_hash(data['content'])
+        if content_hash in seen_for_similarity:
+            continue
 
-            # Skip @no_cache=1.html if the base file exists or has been processed
-            if is_no_cache_version:
-                base_file_path_abs = os.path.join(dirpath, base_name)
-                if os.path.exists(base_file_path_abs) and base_name != filename: # ensure it's not comparing to itself
-                    # Using tqdm.write to not interfere with progress bar
-                    tqdm.write(f"Skipping no_cache version {html_filepath_abs} as base file {base_file_path_abs} exists.")
-                    continue
-            
-            # Using tqdm.write for clean output with progress bar
-            tqdm.write(f"Processing: {html_filepath_abs}")
-            extracted_data = extract_content_from_html(html_filepath_abs, project_root)
-            
-            if extracted_data:
-                # Get the content and generate a hash for duplicate detection
-                content = extracted_data.get('content', '')
-                
-                # Skip very short content as it might be error pages
-                if len(content) < 20:  # Arbitrary threshold for minimal meaningful content
-                    tqdm.write(f"Skipping {html_filepath_abs} due to insufficient content length.")
-                    continue
-                    
-                # Generate content hash using our helper function
-                content_hash = generate_content_hash(content)
-                
-                # Check if we've already seen this exact content
-                if content_hash in seen_contents:
-                    duplicate_count += 1
-                    tqdm.write(f"Exact duplicate content detected in {html_filepath_abs}. Skipping.")
-                    continue
-                
-                # Check for similar content
-                is_similar = False
-                # Display progress for similarity checking if many documents
-                similarity_iter = content_store.items()
-                if len(content_store) > 10:  # Only show nested progress for larger document sets
-                    similarity_iter = tqdm(similarity_iter, desc="Checking document similarity", 
-                                          leave=False, unit="doc", total=len(content_store))
-                
-                for existing_hash, existing_content in similarity_iter:
-                    similarity = calculate_text_similarity(content, existing_content)
-                    if similarity >= SIMILARITY_THRESHOLD:
-                        similarity_duplicate_count += 1
-                        tqdm.write(f"Similar content detected in {html_filepath_abs} (similarity: {similarity:.4f}). Skipping.")
-                        is_similar = True
-                        break
-                
-                if not is_similar:
-                    # Add to tracking set, content store, and save the data
-                    seen_contents.add(content_hash)
-                    content_store[content_hash] = content
-                    all_extracted_data.append(extracted_data)
-                
-            if not is_no_cache_version:
-                processed_base_files.add(base_name)
+        is_similar = False
+        for seen_hash in seen_for_similarity:
+            similarity = calculate_text_similarity(content_map[content_hash], content_map[seen_hash])
+            if similarity >= SIMILARITY_THRESHOLD:
+                is_similar = True
+                similarity_duplicate_count += 1
+                tqdm.write(f"Found similar document (similarity: {similarity:.2f}). Skipping.")
+                break
+        
+        if not is_similar:
+            unique_data.append(data)
+            seen_for_similarity.add(content_hash)
 
-
+    all_extracted_data = unique_data
     total_duplicates = duplicate_count + similarity_duplicate_count
     print(f"\nProcessed files: {len(all_extracted_data) + total_duplicates}")
     print(f"Filtered out {duplicate_count} exact duplicates and {similarity_duplicate_count} similar documents (similarity >= {SIMILARITY_THRESHOLD}).")
     print(f"Total unique documents: {len(all_extracted_data)}")
+
+    # New step: Extract book metadata and clean content in one pass
+    for data in tqdm(all_extracted_data, desc="Extracting book metadata and cleaning content", unit="doc"):
+        book_meta, cleaned_content = extract_and_clean_book_metadata(data['content'])
+        data['content'] = cleaned_content
+        if book_meta:
+            data.update(book_meta)
+
+    # IDs of documents to remove (1-based index)
+    ids_to_remove = {
+        # Content-related pages
+        2,   # Beispielprogramme
+        4,   # Wiederholungsfragen
+        7,   # Sitemap
+        10,
+        11,  # Übungen
+        43,  # Bibliotheken
+        45,  # Videos
+        292, # Apps zum Download
+        293, # Funktionsbaustein-Bibliotheken
+        294, # Funktionsbaustein-Bibliotheken
+        295, # Funktionsbaustein-Bibliotheken
+        # Boilerplate/Meta pages
+        1,   # Anfahrt
+        3,   # Datenschutzerklärung
+        5,   # Erklärung zur Barrierefreiheit
+        6,   # Impressum
+        12   # Login
+    }
+
+    # The filtering logic has been moved into generate_markdown_output for efficiency.
     
-    if output_format == "json":
-        try:
-            print("Saving JSON output...")
-            with open(output_json_file_abs, 'w', encoding='utf-8') as f:
-                json.dump(all_extracted_data, f, ensure_ascii=False, indent=4)
-            print(f"Successfully saved {len(all_extracted_data)} unique documents to {output_json_file_abs}")
-        except Exception as e:
-            print(f"Error saving JSON to file {output_json_file_abs}: {e}")
-    elif output_format == "markdown":
-        try:
-            print("Generating Markdown output...")
-            markdown_content = generate_markdown_output(all_extracted_data)
-            print("Saving Markdown file...")
-            with open(output_markdown_file_abs, 'w', encoding='utf-8') as f:
-                f.write(markdown_content)
-            print(f"Successfully saved {len(all_extracted_data)} unique documents to {output_markdown_file_abs}")
-        except Exception as e:
-            print(f"Error saving Markdown to file {output_markdown_file_abs}: {e}")
-    else:
-        print(f"Unknown output format: {output_format}. Please choose 'json' or 'markdown'.")
+    # Generate and save both files
+    try:
+        print("\nGenerating clean content file...")
+        markdown_content = generate_markdown_output(all_extracted_data, ids_to_remove)
+        print("Saving clean content file...")
+        with open(output_content_file_abs, 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
+        
+        final_doc_count = markdown_content.count("## Document")
+        print(f"Successfully saved {final_doc_count} documents to {output_content_file_abs}")
+
+        print("\nGenerating metadata file...")
+        metadata_content = generate_metadata_output(all_extracted_data, ids_to_remove)
+        with open(output_metadata_file_abs, 'w', encoding='utf-8') as f:
+            f.write(metadata_content)
+        metadata_doc_count = len(json.loads(metadata_content))
+        print(f"Successfully saved metadata for {metadata_doc_count} documents to {output_metadata_file_abs}")
+
+    except Exception as e:
+        print(f"An error occurred during file generation: {e}")
+
 
 if __name__ == "__main__":
-    main()
+    main(output_format="markdown")
