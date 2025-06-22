@@ -148,7 +148,6 @@ def generate_markdown_output(all_data, ids_to_remove):
 
         markdown_lines.append(merged_content)
         markdown_lines.append("")
-        markdown_lines.append("---")
 
     return "\n".join(markdown_lines)
 
