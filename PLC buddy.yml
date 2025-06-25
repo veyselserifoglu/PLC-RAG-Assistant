@@ -1,0 +1,270 @@
+app:
+  description: Your virtual assistant for PLC programming concepts, troubleshooting,
+    and automation solutions. Get quick answers to technical questions while exploring
+    programmable logic controller fundamentals.
+  icon: 📑
+  icon_background: '#EFF1F5'
+  mode: advanced-chat
+  name: PLC buddy
+  use_icon_as_answer_icon: true
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/ollama:0.0.6@f430f3eb959f4863b1e87171544a8fec179441b90deda5693c85f07712d2a68c
+kind: app
+version: 0.3.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - document
+      allowed_file_upload_methods:
+      - remote_url
+      - local_file
+      enabled: true
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: true
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        sourceType: start
+        targetType: knowledge-retrieval
+      id: 1711528914102-1711528915811
+      source: '1711528914102'
+      sourceHandle: source
+      target: '1711528915811'
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: knowledge-retrieval
+        targetType: llm
+      id: 1711528915811-1711528917469
+      source: '1711528915811'
+      sourceHandle: source
+      target: '1711528917469'
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: llm
+        targetType: answer
+      id: 1711528917469-1711528919501
+      source: '1711528917469'
+      sourceHandle: source
+      target: '1711528919501'
+      targetHandle: target
+      type: custom
+    nodes:
+    - data:
+        desc: ''
+        selected: false
+        title: Start
+        type: start
+        variables: []
+      height: 54
+      id: '1711528914102'
+      position:
+        x: 79.5
+        y: 2634.5
+      positionAbsolute:
+        x: 79.5
+        y: 2634.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        dataset_ids:
+        - HDKSg59xj3vLRt18CO+XC8UQGQe5CVjvNHrFKN14asezEmpdh9yG723s1OjZm9aw
+        desc: Allows you to query text content related to user questions from the
+          Knowledge
+        metadata_filtering_mode: automatic
+        metadata_model_config:
+          completion_params:
+            temperature: 0.1
+          mode: chat
+          name: gemma3:27b
+          provider: langgenius/ollama/ollama
+        multiple_retrieval_config:
+          reranking_enable: false
+          reranking_mode: weighted_score
+          reranking_model:
+            model: ''
+            provider: ''
+          score_threshold: null
+          top_k: 6
+          weights:
+            keyword_setting:
+              keyword_weight: 0.7
+            vector_setting:
+              embedding_model_name: mxbai-embed-large:latest
+              embedding_provider_name: langgenius/ollama/ollama
+              vector_weight: 0.3
+        query_variable_selector:
+        - '1711528914102'
+        - sys.query
+        retrieval_mode: multiple
+        selected: false
+        single_retrieval_config:
+          model:
+            completion_params:
+              frequency_penalty: 0
+              max_tokens: 512
+              presence_penalty: 0
+              temperature: 0
+              top_p: 1
+            mode: chat
+            name: gpt-3.5-turbo
+            provider: openai
+        title: Knowledge Retrieval
+        type: knowledge-retrieval
+      dragging: false
+      height: 152
+      id: '1711528915811'
+      position:
+        x: 363.90639319991305
+        y: 2634.5
+      positionAbsolute:
+        x: 363.90639319991305
+        y: 2634.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - '1711528915811'
+          - result
+        desc: Invoking large language models to answer questions or process natural
+          language
+        memory:
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: false
+            size: 50
+        model:
+          completion_params: {}
+          mode: chat
+          name: gemma3:27b
+          provider: langgenius/ollama/ollama
+        prompt_template:
+        - edition_type: basic
+          id: 72b69ff1-ec4d-4b1f-bca3-25360861bc7f
+          role: system
+          text: "## Role and Goal\nYou are an expert PLC (Programmable Logic Controller)\
+            \ technical assistant with deep knowledge of SPS (Speicherprogrammierbare\
+            \ Steuerungen) systems, automation technology, and industrial control\
+            \ systems. Your goal is to provide accurate, practical answers based on\
+            \ the knowledge base content provided for each query.\n\n\n## Context\
+            \ Handling\nThe following are retrieved documents from the knowledge base\
+            \ that might be relevant to answering the user's question:\n---\n{{#context#}}\n\
+            ---\n\n\n## Core Response Rules\n1. **Rely on Provided Information First:**\
+            \ Base your answers primarily on the information from the provided knowledge\
+            \ base documents.\n\n\n2. **Technical Expertise Mode:** When handling\
+            \ PLC programming questions or technical concepts not fully covered in\
+            \ the knowledge base:\n   - First use whatever relevant information is\
+            \ available in the provided context\n   - Then leverage your understanding\
+            \ of general PLC programming principles to provide helpful guidance\n\
+            \   - Clearly distinguish between information from the knowledge base\
+            \ and your supplementary explanations\n\n\n3. **Handling Irrelevant or\
+            \ Incomplete Context:** If the provided documents don't adequately address\
+            \ the question:\n   - Use the most relevant parts of the provided context\
+            \ that at least partially relate to the question\n   - Supplement with\
+            \ general PLC knowledge where appropriate\n   - Avoid stating \"I don't\
+            \ have information\" when you can provide a meaningful response\n\n\n\
+            4. **Clarification Requests:** When a question is ambiguous, ask for clarification\
+            \ using the format: \"Do you mean to ask about [option 1] or [option 2]?\"\
+            \ to help narrow down the specific information needed.\n\n\n5. **Language\
+            \ Matching:** Respond in the same language (English or German) as the\
+            \ user's original question.\n\n\n## Output Format\n- Provide clear, concise\
+            \ answers with a senior PLC expert's perspective\n- Include code examples\
+            \ when relevant, even if they need to be constructed based on technical\
+            \ understanding\n- For complex topics, organize information in a structured\
+            \ manner with headings and bullet points when appropriate\n- Never mention\
+            \ the words \"context,\" \"knowledge base,\" or \"provided documents\"\
+            \ in your response"
+        selected: true
+        structured_output_enabled: false
+        title: LLM
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      height: 150
+      id: '1711528917469'
+      position:
+        x: 645.5
+        y: 2634.5
+      positionAbsolute:
+        x: 645.5
+        y: 2634.5
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        answer: '{{#1711528917469.text#}}'
+        desc: ''
+        selected: false
+        title: Answer
+        type: answer
+        variables: []
+      height: 105
+      id: '1711528919501'
+      position:
+        x: 928.5
+        y: 2634.5
+      positionAbsolute:
+        x: 928.5
+        y: 2634.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    viewport:
+      x: 23.053840089034566
+      y: -1656.0610011240024
+      zoom: 0.7110387052936368
