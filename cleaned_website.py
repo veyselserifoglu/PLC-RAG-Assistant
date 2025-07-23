@@ -217,7 +217,7 @@ def extract_and_clean_book_metadata(content):
     return book_metadata, cleaned_content
 
 def main(output_format: str = "markdown"):
-    project_root = "/home/veysel/dev-projects/PLC-RAG-Assistant"
+    project_root = "."
     html_root_dir_abs = os.path.join(project_root, "www.seitz.et.hs-mannheim.de")
     output_content_file_abs = os.path.join(project_root, "cleaned_content.md")
     output_metadata_file_abs = os.path.join(project_root, "metadata.json")
